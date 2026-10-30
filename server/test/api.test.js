@@ -2,7 +2,8 @@
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { app } from '../src/app.js'
-import { query, close } from '../src/db.js'
+import { query, one, close } from '../src/db.js'
+import { addMinutes } from '../src/time.js'
 
 let server
 let base
@@ -137,7 +138,9 @@ test('review only after the clinic marks the visit completed, and only once', as
   assert.equal((await setStatus('completed')).status, 409) // the visit has not happened yet
 
   // Move the visit into the past, as if the day has come
-  await query('UPDATE appointments SET starts_at = DATEADD(day, -30, starts_at), ends_at = DATEADD(day, -30, ends_at) WHERE id = ?', [appt.id])
+  const row = await one('SELECT starts_at, ends_at FROM appointments WHERE id = ?', [appt.id])
+  const monthAgo = (t) => addMinutes(t, -30 * 24 * 60)
+  await query('UPDATE appointments SET starts_at = ?, ends_at = ? WHERE id = ?', [monthAgo(row.starts_at), monthAgo(row.ends_at), appt.id])
   assert.equal((await setStatus('completed')).status, 200)
 
   assert.equal((await api(`/me/appointments/${appt.id}/review`, { method: 'POST', body: review, token })).status, 201)

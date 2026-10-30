@@ -18,6 +18,15 @@ jobs:
         options: >-
           --health-cmd="/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Ci-Passw0rd!' -Q 'SELECT 1'"
           --health-interval=5s --health-timeout=5s --health-retries=30
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: medicenter
+          POSTGRES_PASSWORD: medicenter
+          POSTGRES_DB: medicenter
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U medicenter" --health-interval=5s --health-timeout=5s --health-retries=30
     env:
       DB_USER: sa
       DB_PASSWORD: Ci-Passw0rd!
@@ -33,8 +42,13 @@ jobs:
       - run: npm test
       - name: Server fills an empty database on first start
         working-directory: server
-        run: |
-          node -e "import('./src/db.js').then(async (db) => { for (const t of ['reviews', 'appointments', 'services', 'doctor_branches', 'doctors', 'branches', 'users', 'organizations', 'specialties']) await db.query('DROP TABLE ' + t); await db.close() })"
-          node src/index.js &
-          for i in $(seq 1 30); do curl -sf localhost:3000/api/stats | grep -q '"clinics":6' && exit 0; sleep 2; done
-          exit 1
+        run: ../.github/scripts/first-start.sh
+      # The same checks against PostgreSQL, the database used on Render
+      - run: npm run db:init
+        env: { DATABASE_URL: 'postgres://medicenter:medicenter@localhost:5432/medicenter' }
+      - run: npm test
+        env: { DATABASE_URL: 'postgres://medicenter:medicenter@localhost:5432/medicenter' }
+      - name: Server fills an empty PostgreSQL database on first start
+        working-directory: server
+        run: ../.github/scripts/first-start.sh
+        env: { DATABASE_URL: 'postgres://medicenter:medicenter@localhost:5432/medicenter' }

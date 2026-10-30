@@ -1,13 +1,16 @@
 // Creates the database and tables and fills them with demo data: npm run db:init
 import sql from 'mssql'
 import { config } from '../config.js'
-import { sqlConfig, close } from '../db.js'
+import { dialect, sqlConfig, close } from '../db.js'
 import { seedDatabase } from '../seed.js'
 
-// Create the database itself if it is missing (needs a login allowed to create databases)
-const master = await new sql.ConnectionPool(sqlConfig('master')).connect()
-await master.request().query(`IF DB_ID(N'${config.db.database}') IS NULL CREATE DATABASE [${config.db.database}]`)
-await master.close()
+// Create the database itself if it is missing (needs a login allowed to create databases).
+// A PostgreSQL database from DATABASE_URL already exists.
+if (dialect === 'mssql') {
+  const master = await new sql.ConnectionPool(sqlConfig('master')).connect()
+  await master.request().query(`IF DB_ID(N'${config.db.database}') IS NULL CREATE DATABASE [${config.db.database}]`)
+  await master.close()
+}
 
 await seedDatabase()
 await close()
