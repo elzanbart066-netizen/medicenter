@@ -14,7 +14,7 @@ admin.get('/organizations', handle(async (_req, res) => {
        (SELECT COUNT(*) FROM appointments a WHERE a.organization_id = o.id) AS appointment_count
      FROM organizations o
      LEFT JOIN users u ON u.organization_id = o.id AND u.role = 'clinic_admin'
-     ORDER BY FIELD(o.status, 'pending', 'approved', 'rejected'), o.created_at DESC`,
+     ORDER BY CASE o.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, o.created_at DESC, o.id DESC`,
   )
   res.json(rows.map((o) => ({
     ...mapClinicHeader(o),

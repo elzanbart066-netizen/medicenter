@@ -50,27 +50,26 @@ patient.post('/appointments', handle(async (req, res) => {
     throw new HttpError(422, 'validation', { time: 'time' })
   }
 
-  const id = await transaction(async (conn) => {
-    const get = async (sql, p) => (await conn.query(sql, p))[0][0]
+  const id = await transaction(async (tx) => {
     // Locking the doctor row serialises bookings for the same doctor, so two patients cannot take one slot.
-    const doctor = await get('SELECT * FROM doctors WHERE id = ? AND active FOR UPDATE', [body.doctorId])
-    const service = await get('SELECT * FROM services WHERE id = ? AND active', [body.serviceId])
-    const link = await get('SELECT 1 AS ok FROM doctor_branches WHERE doctor_id = ? AND branch_id = ?', [body.doctorId, body.branchId])
-    const org = doctor && (await get(`SELECT id FROM organizations WHERE id = ? AND status = 'approved'`, [doctor.organization_id]))
+    const doctor = await tx.one('SELECT * FROM doctors WITH (UPDLOCK, ROWLOCK) WHERE id = ? AND active = 1', [body.doctorId])
+    const service = await tx.one('SELECT * FROM services WHERE id = ? AND active = 1', [body.serviceId])
+    const link = await tx.one('SELECT 1 AS ok FROM doctor_branches WHERE doctor_id = ? AND branch_id = ?', [body.doctorId, body.branchId])
+    const org = doctor && (await tx.one(`SELECT id FROM organizations WHERE id = ? AND status = 'approved'`, [doctor.organization_id]))
     if (!doctor || !service || !link || !org || service.organization_id !== doctor.organization_id || service.specialty_id !== doctor.specialty_id) {
       throw new HttpError(422, 'invalid_selection')
     }
-    const slots = await freeSlots(doctor.id, body.date, service.duration, conn)
+    const slots = await freeSlots(doctor.id, body.date, service.duration, tx)
     if (!slots.includes(body.time)) throw new HttpError(409, 'slot_taken')
 
     const startsAt = `${body.date} ${body.time}:00`
-    const [r] = await conn.query(
+    return tx.insert(
       `INSERT INTO appointments (patient_id, organization_id, branch_id, doctor_id, service_id, starts_at, ends_at, patient_name, patient_phone, comment)
+       OUTPUT INSERTED.id
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [req.user.id, doctor.organization_id, body.branchId, doctor.id, service.id, startsAt, addMinutes(startsAt, service.duration),
         body.fullName.trim(), normalizePhone(body.phone), (body.comment ?? '').trim()],
     )
-    return r.insertId
   })
   const row = await one(`${appointmentSelect} WHERE a.id = ?`, [id])
   res.status(201).json(mapAppointment(row))

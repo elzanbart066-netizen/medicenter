@@ -21,25 +21,22 @@
 
 - **Frontend:** React 18, Vite, Tailwind CSS 4, React Router — `src/`
 - **Backend:** Node.js, Express, REST API + JSON, JWT, bcrypt — `server/src/`
-- **Дерекқор:** MySQL 8 (немесе MariaDB 10.6+) — `server/sql/schema.sql`
+- **Дерекқор:** Microsoft SQL Server 2016+ (Express та болады) — `server/sql/schema.sql`
 - **Тесттер:** 12 API тесті (`node:test`) — `server/test/`
 
 ## Компьютерде іске қосу
 
-Қажет: Node.js 20+ және MySQL.
+Қажет: Node.js 22+ және SQL Server (SSMS арқылы баптаймыз). Толық нұсқаулық: [docs/sql-server-setup.md](docs/sql-server-setup.md).
 
 ```bash
-# 1. MySQL-де дерекқор мен пайдаланушы құру
-mysql -u root -p -e "CREATE DATABASE medicenter CHARACTER SET utf8mb4; CREATE USER 'medicenter'@'localhost' IDENTIFIED BY 'medicenter'; GRANT ALL ON medicenter.* TO 'medicenter'@'localhost';"
-
-# 2. Тәуелділіктер, кестелер және демо деректер
-npm run setup
-npm run db:init
-
-# 3. Екі терминалда
-npm run server   # API: http://localhost:3000
-npm run dev      # Сайт: http://localhost:5173
+npm run setup     # тәуелділіктер
+npm run db:init   # дерекқорды, кестелерді және демо деректерді құрады
+npm run server    # API: http://localhost:3000
+npm run dev       # Сайт: http://localhost:5173 (екінші терминалда)
 ```
+
+Қосылу параметрлері `server/.env` файлында (`server/.env.example` үлгісінен көшіріңіз). Әдепкі мәндер:
+сервер `localhost:1433`, логин `medicenter`, құпиясөз `Medicenter123!`, дерекқор `medicenter`.
 
 Тесттер: `npm test` (алдымен `npm run db:init`).
 
@@ -61,6 +58,6 @@ npm run dev      # Сайт: http://localhost:5173
 - Build: `npm run setup && npm run build`
 - Start: `npm start`
 - Айнымалылар: `server/.env.example` қараңыз (`JWT_SECRET` міндетті).
-- MySQL дерекқорын бөлек сервисте ашып, бір рет `npm run db:init` орындау керек.
+- SQL Server дерекқорын (мысалы, Azure SQL) бөлек ашып, бір рет `npm run db:init` орындау керек.
 
 GitHub Pages тек статикалық сайтты көрсетеді, сондықтан backend-пен жұмыс істемейді.

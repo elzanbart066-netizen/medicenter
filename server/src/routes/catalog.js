@@ -9,7 +9,7 @@ export const catalog = Router()
 catalog.get('/stats', handle(async (_req, res) => {
   res.json(await one(
     `SELECT (SELECT COUNT(*) FROM organizations WHERE status = 'approved') AS clinics,
-            (SELECT COUNT(*) FROM doctors d JOIN organizations o ON o.id = d.organization_id WHERE d.active AND o.status = 'approved') AS doctors`,
+            (SELECT COUNT(*) FROM doctors d JOIN organizations o ON o.id = d.organization_id WHERE d.active = 1 AND o.status = 'approved') AS doctors`,
   ))
 }))
 
@@ -27,8 +27,8 @@ catalog.get('/clinics/:slug', handle(async (req, res) => {
 catalog.get('/doctors/:id/slots', handle(async (req, res) => {
   const { date } = req.query
   if (!isDate(date)) throw new HttpError(422, 'validation', { date: 'date' })
-  const service = await one('SELECT duration FROM services WHERE id = ? AND active', [Number(req.query.serviceId)])
-  const doctor = await one('SELECT id FROM doctors WHERE id = ? AND active', [Number(req.params.id)])
+  const service = await one('SELECT duration FROM services WHERE id = ? AND active = 1', [Number(req.query.serviceId)])
+  const doctor = await one('SELECT id FROM doctors WHERE id = ? AND active = 1', [Number(req.params.id)])
   if (!service || !doctor) throw new HttpError(404, 'not_found')
   res.json(await freeSlots(doctor.id, date, service.duration))
 }))
