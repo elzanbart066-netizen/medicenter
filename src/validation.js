@@ -1,18 +1,25 @@
-// Client-side checks for the booking form. The server must repeat them;
-// these only give the patient fast feedback.
+// Client-side checks for quick feedback. The server repeats every one of them.
+
+const nameOk = (v) => v.trim().length >= 2 && /^[\p{L}\s'.-]+$/u.test(v.trim())
+const phoneOk = (v) => /^[78]7\d{9}$/.test(v.replace(/\D/g, ''))
+const emailOk = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim())
+export const passwordOk = (v) => v.length >= 8 && /\d/.test(v) && /\p{L}/u.test(v)
 
 export function validateContact(form) {
   const errors = {}
-  const name = form.name.trim()
-  if (name.length < 2 || !/^[\p{L}\s'-]+$/u.test(name)) errors.name = 'errName'
-
-  const phoneDigits = form.phone.replace(/\D/g, '')
-  if (!/^[78]7\d{9}$/.test(phoneDigits)) errors.phone = 'errPhone'
-
-  if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email.trim())) errors.email = 'errEmail'
-  if (form.iin && !/^\d{12}$/.test(form.iin.trim())) errors.iin = 'errIin'
+  if (!nameOk(form.name)) errors.name = 'errName'
+  if (!phoneOk(form.phone)) errors.phone = 'errPhone'
   if (form.comment.length > 300) errors.comment = 'errComment'
   if (!form.consent) errors.consent = 'errConsent'
+  return errors
+}
+
+export function validateAccount(form) {
+  const errors = {}
+  if ('fullName' in form && !nameOk(form.fullName)) errors.fullName = 'errName'
+  if ('phone' in form && !phoneOk(form.phone)) errors.phone = 'errPhone'
+  if (!emailOk(form.email)) errors.email = 'errEmail'
+  if (!passwordOk(form.password)) errors.password = 'errPassword'
   return errors
 }
 

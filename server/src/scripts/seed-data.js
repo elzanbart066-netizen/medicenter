@@ -1,23 +1,5 @@
-// Demo data: every clinic, doctor and price below is fictional.
-
-export const specialties = [
-  { id: 'therapist', icon: '🩺', name: { kk: 'Терапевт', ru: 'Терапевт' } },
-  { id: 'pediatrician', icon: '🧸', name: { kk: 'Педиатр', ru: 'Педиатр' } },
-  { id: 'cardiologist', icon: '❤️', name: { kk: 'Кардиолог', ru: 'Кардиолог' } },
-  { id: 'dentist', icon: '🦷', name: { kk: 'Стоматолог', ru: 'Стоматолог' } },
-  { id: 'neurologist', icon: '🧠', name: { kk: 'Невролог', ru: 'Невролог' } },
-  { id: 'gynecologist', icon: '🌸', name: { kk: 'Гинеколог', ru: 'Гинеколог' } },
-  { id: 'ophthalmologist', icon: '👁️', name: { kk: 'Офтальмолог', ru: 'Офтальмолог' } },
-  { id: 'ent', icon: '👂', name: { kk: 'ЛОР', ru: 'ЛОР' } },
-]
-
-export const districts = [
-  { id: 'esil', name: { kk: 'Есіл ауданы', ru: 'район Есиль' } },
-  { id: 'almaty', name: { kk: 'Алматы ауданы', ru: 'район Алматы' } },
-  { id: 'saryarka', name: { kk: 'Сарыарқа ауданы', ru: 'район Сарыарка' } },
-  { id: 'baikonyr', name: { kk: 'Байқоңыр ауданы', ru: 'район Байконур' } },
-  { id: 'nura', name: { kk: 'Нұра ауданы', ru: 'район Нура' } },
-]
+// Demo data for the seed script: every clinic, doctor and price is fictional.
+import { specialties } from '../../../shared/constants.js'
 
 const consult = (spec, price) => ({
   id: `${spec}-consult`,
@@ -178,24 +160,3 @@ export const clinics = [
     ],
   },
 ]
-
-export const getClinic = (id) => clinics.find((c) => c.id === id)
-export const getSpecialty = (id) => specialties.find((s) => s.id === id)
-export const getDistrict = (id) => districts.find((d) => d.id === id)
-export const minPrice = (clinic) => Math.min(...clinic.services.map((s) => s.price))
-
-// Deterministic fake schedule: some slots are "taken" based on a hash of doctor + date + time.
-export function freeSlots(doctorId, date) {
-  if (date.getDay() === 0) return []
-  const slots = []
-  for (let h = 9; h < 18; h++) {
-    for (const m of ['00', '30']) {
-      const time = `${String(h).padStart(2, '0')}:${m}`
-      const key = `${doctorId}${date.toDateString()}${time}`
-      let hash = 0
-      for (const ch of key) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
-      if (hash % 3 !== 0) slots.push(time)
-    }
-  }
-  return slots
-}

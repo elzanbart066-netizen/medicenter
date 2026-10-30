@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import ClinicCard from '../components/ClinicCard.jsx'
 import SearchBar from '../components/SearchBar.jsx'
 import DemoNotice from '../components/DemoNotice.jsx'
 import { useLang } from '../i18n.jsx'
-import { clinics, districts, specialties, minPrice } from '../data/clinics.js'
+import { useApi } from '../api.js'
+import { ErrorBox, Loading } from '../components/ui.jsx'
+import { districts, specialties } from '../../shared/constants.js'
 
 const priceSteps = [5000, 10000, 15000]
 
@@ -22,24 +23,8 @@ export default function Catalog() {
     setParams(next, { replace: true })
   }
 
-  const results = useMemo(() => {
-    const needle = q.toLowerCase()
-    const result = clinics.filter((c) => {
-      if (district && !c.branches.some((b) => b.district === district)) return false
-      if (specialty && !c.doctors.some((d) => d.specialty === specialty)) return false
-      if (maxPrice && minPrice(c) > maxPrice) return false
-      if (!needle) return true
-      const haystack = [
-        c.name,
-        ...c.doctors.map((d) => d.name),
-        ...c.doctors.flatMap((d) => Object.values(specialties.find((s) => s.id === d.specialty).name)),
-        ...c.services.flatMap((s) => Object.values(s.name)),
-      ].join(' ').toLowerCase()
-      return haystack.includes(needle)
-    })
-    // sponsored placement goes first, but is always labelled as an ad on the card
-    return result.sort((a, b) => Number(!!b.sponsored) - Number(!!a.sponsored))
-  }, [q, district, specialty, maxPrice])
+  const query = new URLSearchParams({ q, district, specialty, maxPrice: maxPrice || '' })
+  const { data: results, error, loading } = useApi(`/clinics?${query}`)
 
   const chip = (active) =>
     `chip ${active ? 'border-navy bg-navy text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-brand hover:text-brand'}`
@@ -88,8 +73,11 @@ export default function Catalog() {
         </aside>
 
         <section>
-          <p className="mb-4 text-sm text-slate-500">{t('found')}: <b className="text-navy">{results.length}</b></p>
-          {results.length ? (
+          <ErrorBox error={error} />
+          {loading && !results ? <Loading /> : results && (
+            <p className="mb-4 text-sm text-slate-500">{t('found')}: <b className="text-navy">{results.length}</b></p>
+          )}
+          {!results ? null : results.length ? (
             <div className="grid gap-5 sm:grid-cols-2">
               {results.map((c) => <ClinicCard key={c.id} clinic={c} />)}
             </div>
