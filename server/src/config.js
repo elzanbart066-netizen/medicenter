@@ -1,10 +1,12 @@
 export const config = {
   port: Number(process.env.PORT) || 3000,
   db: {
-    host: process.env.DB_HOST || 'localhost',
-    port: Number(process.env.DB_PORT) || 3306,
+    server: process.env.DB_SERVER || 'localhost',
+    port: Number(process.env.DB_PORT) || 1433,
+    // For a named instance such as SQLEXPRESS (needs the SQL Server Browser service)
+    instanceName: process.env.DB_INSTANCE || undefined,
     user: process.env.DB_USER || 'medicenter',
-    password: process.env.DB_PASSWORD || 'medicenter',
+    password: process.env.DB_PASSWORD || 'Medicenter123!',
     database: process.env.DB_NAME || 'medicenter',
   },
   jwtSecret: process.env.JWT_SECRET || 'dev-only-secret-change-me',

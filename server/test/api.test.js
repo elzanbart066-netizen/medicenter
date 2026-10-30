@@ -2,7 +2,7 @@
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { app } from '../src/app.js'
-import { pool } from '../src/db.js'
+import { query, close } from '../src/db.js'
 
 let server
 let base
@@ -15,7 +15,7 @@ before(async () => {
 
 after(async () => {
   server.close()
-  await pool.end()
+  await close()
 })
 
 async function api(path, { method = 'GET', body, token } = {}) {
@@ -137,7 +137,7 @@ test('review only after the clinic marks the visit completed, and only once', as
   assert.equal((await setStatus('completed')).status, 409) // the visit has not happened yet
 
   // Move the visit into the past, as if the day has come
-  await pool.query('UPDATE appointments SET starts_at = starts_at - INTERVAL 30 DAY, ends_at = ends_at - INTERVAL 30 DAY WHERE id = ?', [appt.id])
+  await query('UPDATE appointments SET starts_at = DATEADD(day, -30, starts_at), ends_at = DATEADD(day, -30, ends_at) WHERE id = ?', [appt.id])
   assert.equal((await setStatus('completed')).status, 200)
 
   assert.equal((await api(`/me/appointments/${appt.id}/review`, { method: 'POST', body: review, token })).status, 201)

@@ -1,122 +1,114 @@
--- MediCenter database schema (MySQL 8 / MariaDB 10.6+)
+-- MediCenter database schema (Microsoft SQL Server 2016+)
 
-SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS reviews, appointments, services, doctor_branches, doctors, branches, users, organizations, specialties;
-SET FOREIGN_KEY_CHECKS = 1;
+DROP TABLE IF EXISTS reviews;
+DROP TABLE IF EXISTS appointments;
+DROP TABLE IF EXISTS services;
+DROP TABLE IF EXISTS doctor_branches;
+DROP TABLE IF EXISTS doctors;
+DROP TABLE IF EXISTS branches;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS organizations;
+DROP TABLE IF EXISTS specialties;
 
 CREATE TABLE specialties (
   id VARCHAR(32) PRIMARY KEY,
-  icon VARCHAR(16) NOT NULL,
-  name_kk VARCHAR(100) NOT NULL,
-  name_ru VARCHAR(100) NOT NULL
+  icon NVARCHAR(16) NOT NULL,
+  name_kk NVARCHAR(100) NOT NULL,
+  name_ru NVARCHAR(100) NOT NULL
 );
 
 CREATE TABLE organizations (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  id INT IDENTITY PRIMARY KEY,
   slug VARCHAR(64) NOT NULL UNIQUE,
-  name VARCHAR(150) NOT NULL,
-  description_kk TEXT NOT NULL,
-  description_ru TEXT NOT NULL,
+  name NVARCHAR(150) NOT NULL,
+  description_kk NVARCHAR(1000) NOT NULL,
+  description_ru NVARCHAR(1000) NOT NULL,
   phone VARCHAR(20) NOT NULL,
-  hours_kk VARCHAR(100) NOT NULL,
-  hours_ru VARCHAR(100) NOT NULL,
+  hours_kk NVARCHAR(100) NOT NULL,
+  hours_ru NVARCHAR(100) NOT NULL,
   color VARCHAR(40) NOT NULL DEFAULT 'from-navy to-brand',
-  status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
-  featured BOOLEAN NOT NULL DEFAULT FALSE,
-  sponsored BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  status VARCHAR(10) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  featured BIT NOT NULL DEFAULT 0,
+  sponsored BIT NOT NULL DEFAULT 0,
+  created_at DATETIME2(0) NOT NULL DEFAULT SYSDATETIME()
 );
 
 CREATE TABLE users (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  role ENUM('patient', 'doctor', 'clinic_admin', 'platform_admin') NOT NULL,
-  full_name VARCHAR(120) NOT NULL,
+  id INT IDENTITY PRIMARY KEY,
+  role VARCHAR(20) NOT NULL CHECK (role IN ('patient', 'doctor', 'clinic_admin', 'platform_admin')),
+  full_name NVARCHAR(120) NOT NULL,
   phone VARCHAR(20) NOT NULL,
   email VARCHAR(150) NOT NULL UNIQUE,
   password_hash VARCHAR(100) NOT NULL,
-  organization_id INT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+  organization_id INT NULL REFERENCES organizations(id),
+  created_at DATETIME2(0) NOT NULL DEFAULT SYSDATETIME()
 );
 
 CREATE TABLE branches (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  organization_id INT NOT NULL,
+  id INT IDENTITY PRIMARY KEY,
+  organization_id INT NOT NULL REFERENCES organizations(id),
   district VARCHAR(32) NOT NULL,
-  address_kk VARCHAR(200) NOT NULL,
-  address_ru VARCHAR(200) NOT NULL,
-  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+  address_kk NVARCHAR(200) NOT NULL,
+  address_ru NVARCHAR(200) NOT NULL
 );
 
 CREATE TABLE doctors (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  organization_id INT NOT NULL,
-  user_id INT NULL UNIQUE,
-  full_name VARCHAR(120) NOT NULL,
-  specialty_id VARCHAR(32) NOT NULL,
-  experience TINYINT UNSIGNED NOT NULL DEFAULT 0,
-  active BOOLEAN NOT NULL DEFAULT TRUE,
-  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
-  FOREIGN KEY (specialty_id) REFERENCES specialties(id)
+  id INT IDENTITY PRIMARY KEY,
+  organization_id INT NOT NULL REFERENCES organizations(id),
+  user_id INT NULL REFERENCES users(id),
+  full_name NVARCHAR(120) NOT NULL,
+  specialty_id VARCHAR(32) NOT NULL REFERENCES specialties(id),
+  experience TINYINT NOT NULL DEFAULT 0,
+  active BIT NOT NULL DEFAULT 1
 );
+
+-- One login per doctor; many doctors have no login at all
+CREATE UNIQUE INDEX ux_doctors_user ON doctors(user_id) WHERE user_id IS NOT NULL;
 
 -- A doctor can work in several branches of the same clinic
 CREATE TABLE doctor_branches (
-  doctor_id INT NOT NULL,
-  branch_id INT NOT NULL,
-  PRIMARY KEY (doctor_id, branch_id),
-  FOREIGN KEY (doctor_id) REFERENCES doctors(id) ON DELETE CASCADE,
-  FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
+  doctor_id INT NOT NULL REFERENCES doctors(id) ON DELETE CASCADE,
+  branch_id INT NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+  PRIMARY KEY (doctor_id, branch_id)
 );
 
 CREATE TABLE services (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  organization_id INT NOT NULL,
-  specialty_id VARCHAR(32) NOT NULL,
-  name_kk VARCHAR(150) NOT NULL,
-  name_ru VARCHAR(150) NOT NULL,
-  price INT UNSIGNED NOT NULL,
-  duration SMALLINT UNSIGNED NOT NULL DEFAULT 30,
-  active BOOLEAN NOT NULL DEFAULT TRUE,
-  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
-  FOREIGN KEY (specialty_id) REFERENCES specialties(id)
+  id INT IDENTITY PRIMARY KEY,
+  organization_id INT NOT NULL REFERENCES organizations(id),
+  specialty_id VARCHAR(32) NOT NULL REFERENCES specialties(id),
+  name_kk NVARCHAR(150) NOT NULL,
+  name_ru NVARCHAR(150) NOT NULL,
+  price INT NOT NULL CHECK (price > 0),
+  duration SMALLINT NOT NULL DEFAULT 30,
+  active BIT NOT NULL DEFAULT 1
 );
 
 CREATE TABLE appointments (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  patient_id INT NOT NULL,
-  organization_id INT NOT NULL,
-  branch_id INT NOT NULL,
-  doctor_id INT NOT NULL,
-  service_id INT NOT NULL,
-  starts_at DATETIME NOT NULL,
-  ends_at DATETIME NOT NULL,
-  status ENUM('pending', 'confirmed', 'completed', 'cancelled') NOT NULL DEFAULT 'pending',
-  patient_name VARCHAR(120) NOT NULL,
+  id INT IDENTITY PRIMARY KEY,
+  patient_id INT NOT NULL REFERENCES users(id),
+  organization_id INT NOT NULL REFERENCES organizations(id),
+  branch_id INT NOT NULL REFERENCES branches(id),
+  doctor_id INT NOT NULL REFERENCES doctors(id),
+  service_id INT NOT NULL REFERENCES services(id),
+  starts_at DATETIME2(0) NOT NULL,
+  ends_at DATETIME2(0) NOT NULL,
+  status VARCHAR(10) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'completed', 'cancelled')),
+  patient_name NVARCHAR(120) NOT NULL,
   patient_phone VARCHAR(20) NOT NULL,
-  comment VARCHAR(300) NOT NULL DEFAULT '',
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_doctor_time (doctor_id, starts_at),
-  FOREIGN KEY (patient_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
-  FOREIGN KEY (branch_id) REFERENCES branches(id),
-  FOREIGN KEY (doctor_id) REFERENCES doctors(id),
-  FOREIGN KEY (service_id) REFERENCES services(id)
+  comment NVARCHAR(300) NOT NULL DEFAULT '',
+  created_at DATETIME2(0) NOT NULL DEFAULT SYSDATETIME()
 );
+
+CREATE INDEX ix_appointments_doctor_time ON appointments(doctor_id, starts_at);
 
 -- Only one review per completed appointment
 CREATE TABLE reviews (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  appointment_id INT NOT NULL UNIQUE,
-  patient_id INT NOT NULL,
-  organization_id INT NOT NULL,
-  doctor_id INT NOT NULL,
-  rating TINYINT UNSIGNED NOT NULL CHECK (rating BETWEEN 1 AND 5),
-  text VARCHAR(500) NOT NULL DEFAULT '',
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE CASCADE,
-  FOREIGN KEY (patient_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
-  FOREIGN KEY (doctor_id) REFERENCES doctors(id) ON DELETE CASCADE
+  id INT IDENTITY PRIMARY KEY,
+  appointment_id INT NOT NULL UNIQUE REFERENCES appointments(id),
+  patient_id INT NOT NULL REFERENCES users(id),
+  organization_id INT NOT NULL REFERENCES organizations(id),
+  doctor_id INT NOT NULL REFERENCES doctors(id),
+  rating TINYINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  text NVARCHAR(500) NOT NULL DEFAULT '',
+  created_at DATETIME2(0) NOT NULL DEFAULT SYSDATETIME()
 );

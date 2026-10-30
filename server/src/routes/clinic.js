@@ -59,7 +59,7 @@ clinic.put('/branches/:id', handle(async (req, res) => {
 
 clinic.delete('/branches/:id', handle(async (req, res) => {
   const branch = await owned('branches', req)
-  if (await one('SELECT id FROM appointments WHERE branch_id = ? LIMIT 1', [branch.id])) throw new HttpError(409, 'has_appointments')
+  if (await one('SELECT TOP 1 id FROM appointments WHERE branch_id = ?', [branch.id])) throw new HttpError(409, 'has_appointments')
   await query('DELETE FROM branches WHERE id = ?', [branch.id])
   res.json({ ok: true })
 }))
@@ -102,20 +102,22 @@ const checkDoctor = async (req) => {
   return ids
 }
 
-const setDoctorBranches = async (conn, doctorId, branchIds) => {
-  await conn.query('DELETE FROM doctor_branches WHERE doctor_id = ?', [doctorId])
-  await conn.query('INSERT INTO doctor_branches (doctor_id, branch_id) VALUES ?', [branchIds.map((b) => [doctorId, b])])
+const setDoctorBranches = async (tx, doctorId, branchIds) => {
+  await tx.query('DELETE FROM doctor_branches WHERE doctor_id = ?', [doctorId])
+  for (const branchId of new Set(branchIds)) {
+    await tx.query('INSERT INTO doctor_branches (doctor_id, branch_id) VALUES (?, ?)', [doctorId, branchId])
+  }
 }
 
 clinic.post('/doctors', handle(async (req, res) => {
   const branchIds = await checkDoctor(req)
   const b = req.body
-  await transaction(async (conn) => {
-    const [r] = await conn.query(
-      'INSERT INTO doctors (organization_id, full_name, specialty_id, experience) VALUES (?, ?, ?, ?)',
+  await transaction(async (tx) => {
+    const id = await tx.insert(
+      'INSERT INTO doctors (organization_id, full_name, specialty_id, experience) OUTPUT INSERTED.id VALUES (?, ?, ?, ?)',
       [orgId(req), b.fullName.trim(), b.specialty, b.experience],
     )
-    await setDoctorBranches(conn, r.insertId, branchIds)
+    await setDoctorBranches(tx, id, branchIds)
   })
   res.status(201).json({ ok: true })
 }))
@@ -124,12 +126,12 @@ clinic.put('/doctors/:id', handle(async (req, res) => {
   const doctor = await owned('doctors', req)
   const branchIds = await checkDoctor(req)
   const b = req.body
-  await transaction(async (conn) => {
-    await conn.query(
+  await transaction(async (tx) => {
+    await tx.query(
       'UPDATE doctors SET full_name = ?, specialty_id = ?, experience = ?, active = ? WHERE id = ?',
       [b.fullName.trim(), b.specialty, b.experience, b.active !== false, doctor.id],
     )
-    await setDoctorBranches(conn, doctor.id, branchIds)
+    await setDoctorBranches(tx, doctor.id, branchIds)
   })
   res.json({ ok: true })
 }))
@@ -138,7 +140,7 @@ clinic.put('/doctors/:id', handle(async (req, res) => {
 const transitions = { pending: ['confirmed', 'cancelled'], confirmed: ['completed', 'cancelled'] }
 
 clinic.get('/appointments', handle(async (req, res) => {
-  const rows = await query(`${appointmentSelect} WHERE a.organization_id = ? ORDER BY a.starts_at DESC LIMIT 200`, [orgId(req)])
+  const rows = await query(`${appointmentSelect.replace('SELECT', 'SELECT TOP 200')} WHERE a.organization_id = ? ORDER BY a.starts_at DESC`, [orgId(req)])
   res.json(rows.map(mapAppointment))
 }))
 

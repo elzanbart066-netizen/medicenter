@@ -18,8 +18,8 @@ export const mapService = (s) => ({
 export async function listClinics({ q, district, specialty, maxPrice } = {}) {
   const orgs = await query(
     `SELECT o.*,
-       (SELECT MIN(price) FROM services s WHERE s.organization_id = o.id AND s.active) AS min_price,
-       (SELECT ROUND(AVG(rating), 1) FROM reviews r WHERE r.organization_id = o.id) AS rating,
+       (SELECT MIN(price) FROM services s WHERE s.organization_id = o.id AND s.active = 1) AS min_price,
+       (SELECT ROUND(AVG(CAST(rating AS DECIMAL(4, 2))), 1) FROM reviews r WHERE r.organization_id = o.id) AS rating,
        (SELECT COUNT(*) FROM reviews r WHERE r.organization_id = o.id) AS review_count
      FROM organizations o WHERE o.status = 'approved'
      ORDER BY o.sponsored DESC, o.featured DESC, o.name`,
@@ -27,8 +27,8 @@ export async function listClinics({ q, district, specialty, maxPrice } = {}) {
   if (!orgs.length) return []
   const ids = orgs.map((o) => o.id)
   const branches = await query('SELECT * FROM branches WHERE organization_id IN (?)', [ids])
-  const doctors = await query('SELECT id, organization_id, full_name, specialty_id FROM doctors WHERE active AND organization_id IN (?)', [ids])
-  const services = await query('SELECT organization_id, name_kk, name_ru, price FROM services WHERE active AND organization_id IN (?)', [ids])
+  const doctors = await query('SELECT id, organization_id, full_name, specialty_id FROM doctors WHERE active = 1 AND organization_id IN (?)', [ids])
+  const services = await query('SELECT organization_id, name_kk, name_ru, price FROM services WHERE active = 1 AND organization_id IN (?)', [ids])
 
   const needle = q?.trim().toLowerCase()
   return orgs
@@ -76,17 +76,17 @@ export const mapClinicHeader = (o) => ({
 })
 
 export async function clinicDetails(org, { includeInactive = false } = {}) {
-  const active = includeInactive ? '' : 'AND active'
+  const active = (col) => (includeInactive ? '' : `AND ${col} = 1`)
   const [stats, branches, doctors, links, services, reviews] = await Promise.all([
-    one('SELECT ROUND(AVG(rating), 1) AS rating, COUNT(*) AS review_count FROM reviews WHERE organization_id = ?', [org.id]),
+    one('SELECT ROUND(AVG(CAST(rating AS DECIMAL(4, 2))), 1) AS rating, COUNT(*) AS review_count FROM reviews WHERE organization_id = ?', [org.id]),
     query('SELECT * FROM branches WHERE organization_id = ? ORDER BY id', [org.id]),
-    query(`SELECT d.*, u.email AS login_email FROM doctors d LEFT JOIN users u ON u.id = d.user_id WHERE d.organization_id = ? ${active.replace('active', 'd.active')} ORDER BY d.id`, [org.id]),
+    query(`SELECT d.*, u.email AS login_email FROM doctors d LEFT JOIN users u ON u.id = d.user_id WHERE d.organization_id = ? ${active('d.active')} ORDER BY d.id`, [org.id]),
     query('SELECT db.* FROM doctor_branches db JOIN doctors d ON d.id = db.doctor_id WHERE d.organization_id = ?', [org.id]),
-    query(`SELECT * FROM services WHERE organization_id = ? ${active} ORDER BY price`, [org.id]),
+    query(`SELECT * FROM services WHERE organization_id = ? ${active('active')} ORDER BY price`, [org.id]),
     query(
-      `SELECT r.id, r.rating, r.text, r.created_at, d.full_name AS doctor_name, u.full_name AS patient_name
+      `SELECT TOP 20 r.id, r.rating, r.text, r.created_at, d.full_name AS doctor_name, u.full_name AS patient_name
        FROM reviews r JOIN doctors d ON d.id = r.doctor_id JOIN users u ON u.id = r.patient_id
-       WHERE r.organization_id = ? ORDER BY r.created_at DESC LIMIT 20`,
+       WHERE r.organization_id = ? ORDER BY r.created_at DESC, r.id DESC`,
       [org.id],
     ),
   ])
@@ -116,11 +116,10 @@ export async function clinicDetails(org, { includeInactive = false } = {}) {
 }
 
 // Free start times for a doctor on a date for a service of the given duration.
-// Pass a transaction connection to read inside the booking transaction.
-export async function freeSlots(doctorId, date, duration, conn) {
+// Pass a transaction (tx) to read inside the booking transaction.
+export async function freeSlots(doctorId, date, duration, tx) {
   if (weekday(date) === 0) return []
-  const run = conn ? async (sql, p) => (await conn.query(sql, p))[0] : query
-  const busy = await run(
+  const busy = await (tx ? tx.query.bind(tx) : query)(
     `SELECT starts_at, ends_at FROM appointments
      WHERE doctor_id = ? AND status <> 'cancelled' AND starts_at < ? AND ends_at > ?`,
     [doctorId, `${date} 23:59:59`, `${date} 00:00:00`],

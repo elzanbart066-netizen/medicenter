@@ -14,12 +14,12 @@ auth.post('/register', handle(async (req, res) => {
   const email = req.body.email.trim().toLowerCase()
   if (await emailTaken(email)) throw new HttpError(409, 'email_taken', { email: 'taken' })
   const hash = await bcrypt.hash(req.body.password, 10)
-  const user = await transaction(async (conn) => {
-    const [r] = await conn.query(
-      `INSERT INTO users (role, full_name, phone, email, password_hash) VALUES ('patient', ?, ?, ?, ?)`,
+  const user = await transaction(async (tx) => {
+    const id = await tx.insert(
+      `INSERT INTO users (role, full_name, phone, email, password_hash) OUTPUT INSERTED.id VALUES ('patient', ?, ?, ?, ?)`,
       [req.body.fullName.trim(), normalizePhone(req.body.phone), email, hash],
     )
-    return (await conn.query('SELECT * FROM users WHERE id = ?', [r.insertId]))[0][0]
+    return tx.one('SELECT * FROM users WHERE id = ?', [id])
   })
   res.status(201).json({ token: signToken(user), user: publicUser(user) })
 }))
@@ -46,18 +46,19 @@ auth.post('/apply', handle(async (req, res) => {
   if (await emailTaken(email)) throw new HttpError(409, 'email_taken', { email: 'taken' })
   const hash = await bcrypt.hash(req.body.password, 10)
   const slugBase = req.body.clinicName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'clinic'
-  const user = await transaction(async (conn) => {
+  const user = await transaction(async (tx) => {
     const description = req.body.description.trim()
-    const [org] = await conn.query(
+    const orgId = await tx.insert(
       `INSERT INTO organizations (slug, name, description_kk, description_ru, phone, hours_kk, hours_ru, status)
-       VALUES (?, ?, ?, ?, ?, 'Дс–Жм, 09:00–18:00', 'Пн–Пт, 09:00–18:00', 'pending')`,
+       OUTPUT INSERTED.id
+       VALUES (?, ?, ?, ?, ?, N'Дс–Жм, 09:00–18:00', N'Пн–Пт, 09:00–18:00', 'pending')`,
       [`${slugBase}-${Date.now().toString(36)}`, req.body.clinicName.trim(), description, description, normalizePhone(req.body.clinicPhone)],
     )
-    const [u] = await conn.query(
-      `INSERT INTO users (role, full_name, phone, email, password_hash, organization_id) VALUES ('clinic_admin', ?, ?, ?, ?, ?)`,
-      [req.body.fullName.trim(), normalizePhone(req.body.phone), email, hash, org.insertId],
+    const id = await tx.insert(
+      `INSERT INTO users (role, full_name, phone, email, password_hash, organization_id) OUTPUT INSERTED.id VALUES ('clinic_admin', ?, ?, ?, ?, ?)`,
+      [req.body.fullName.trim(), normalizePhone(req.body.phone), email, hash, orgId],
     )
-    return (await conn.query('SELECT * FROM users WHERE id = ?', [u.insertId]))[0][0]
+    return tx.one('SELECT * FROM users WHERE id = ?', [id])
   })
   res.status(201).json({ token: signToken(user), user: publicUser(user) })
 }))
