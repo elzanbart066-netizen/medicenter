@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import NotFound from './NotFound.jsx'
-import DemoNotice from '../components/DemoNotice.jsx'
+import { ErrorBox, Field, Loading, toDateParam } from '../components/ui.jsx'
 import { useLang } from '../i18n.jsx'
-import { freeSlots, getClinic, getSpecialty } from '../data/clinics.js'
+import { useAuth } from '../auth.jsx'
+import { api, useApi } from '../api.js'
+import { specialties } from '../../shared/constants.js'
 import { formatPhone, validateContact } from '../validation.js'
 
 const steps = ['stepBranch', 'stepService', 'stepTime', 'stepContact']
@@ -12,7 +14,7 @@ function nextDays(count) {
   const days = []
   const start = new Date()
   start.setHours(0, 0, 0, 0)
-  for (let i = 1; i <= count; i++) {
+  for (let i = 0; i < count; i++) {
     const d = new Date(start)
     d.setDate(start.getDate() + i)
     days.push(d)
@@ -21,41 +23,75 @@ function nextDays(count) {
 }
 
 export default function Booking() {
-  const { clinicId } = useParams()
+  const { slug } = useParams()
   const [params] = useSearchParams()
+  const location = useLocation()
   const { t, tr, price, weekday, longDate } = useLang()
-  const clinic = getClinic(clinicId)
+  const { user, ready } = useAuth()
+  const { data: clinic, error: loadError, loading } = useApi(`/clinics/${slug}`)
 
-  const presetDoctor = clinic?.doctors.find((d) => d.id === params.get('doctor'))
   const [step, setStep] = useState(0)
-  const [branchId, setBranchId] = useState(presetDoctor?.branches[0] ?? clinic?.branches[0].id)
-  const [doctorId, setDoctorId] = useState(presetDoctor?.id ?? '')
-  const [serviceId, setServiceId] = useState('')
+  const [branchId, setBranchId] = useState(null)
+  const [doctorId, setDoctorId] = useState(null)
+  const [serviceId, setServiceId] = useState(null)
   const [date, setDate] = useState(null)
   const [time, setTime] = useState('')
-  const [form, setForm] = useState({ name: '', phone: '', email: '', iin: '', comment: '', consent: false })
+  const [form, setForm] = useState({ name: '', phone: '', comment: '', consent: false })
   const [errors, setErrors] = useState({})
-  const [done, setDone] = useState(false)
+  const [submitError, setSubmitError] = useState(null)
+  const [sending, setSending] = useState(false)
+  const [done, setDone] = useState(null)
 
-  const days = useMemo(() => nextDays(10), [])
-  if (!clinic) return <NotFound />
+  const days = useMemo(() => nextDays(14), [])
+
+  // Preselect the doctor from ?doctor= and the first branch once the clinic loads
+  useEffect(() => {
+    if (!clinic) return
+    const preset = clinic.doctors.find((d) => d.id === Number(params.get('doctor')))
+    setBranchId(preset?.branches[0] ?? clinic.branches[0]?.id)
+    if (preset) setDoctorId(preset.id)
+  }, [clinic, params])
+
+  useEffect(() => {
+    if (user) setForm((f) => ({ ...f, name: f.name || user.fullName, phone: f.phone || user.phone }))
+  }, [user])
+
+  const slotsPath = doctorId && serviceId && date ? `/doctors/${doctorId}/slots?date=${toDateParam(date)}&serviceId=${serviceId}` : null
+  const { data: slots, loading: slotsLoading, reload: reloadSlots } = useApi(slotsPath)
+
+  if (loading || !ready) return <Loading />
+  if (loadError?.status === 404) return <NotFound />
+  if (loadError) return <div className="mx-auto max-w-6xl px-4 pt-8"><ErrorBox error={loadError} /></div>
+
+  if (!user || user.role !== 'patient') {
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-mint/40 text-3xl">🔒</div>
+        <h1 className="mt-6 text-2xl font-extrabold text-navy">{t('loginToBook')}</h1>
+        <p className="mt-2 text-slate-600">{clinic.name}</p>
+        <div className="mt-8 flex justify-center gap-3">
+          <Link to="/login" state={{ from: location.pathname + location.search }} className="btn-primary">{t('signIn')}</Link>
+          <Link to="/register" state={{ from: location.pathname + location.search }} className="btn-ghost">{t('register')}</Link>
+        </div>
+      </div>
+    )
+  }
 
   const branch = clinic.branches.find((b) => b.id === branchId)
   const doctors = clinic.doctors.filter((d) => d.branches.includes(branchId))
   const doctor = clinic.doctors.find((d) => d.id === doctorId)
   const services = doctor ? clinic.services.filter((s) => s.specialty === doctor.specialty) : []
   const service = clinic.services.find((s) => s.id === serviceId)
-  const slots = doctor && date ? freeSlots(doctor.id, date) : []
 
   const canNext = [doctor, service, date && time][step]
 
   const pickBranch = (id) => {
     setBranchId(id)
-    if (doctor && !doctor.branches.includes(id)) setDoctorId('')
+    if (doctor && !doctor.branches.includes(id)) setDoctorId(null)
   }
   const pickDoctor = (id) => {
     setDoctorId(id)
-    setServiceId('')
+    setServiceId(null)
     setTime('')
   }
   const setField = (key, value) => {
@@ -63,12 +99,35 @@ export default function Booking() {
     if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }))
   }
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault()
     const found = validateContact(form)
     setErrors(found)
-    if (!Object.keys(found).length) setDone(true)
+    if (Object.keys(found).length) return
+    setSending(true)
+    setSubmitError(null)
+    try {
+      const appt = await api('/me/appointments', {
+        method: 'POST',
+        body: {
+          branchId, doctorId, serviceId, date: toDateParam(date), time,
+          fullName: form.name, phone: form.phone, comment: form.comment,
+        },
+      })
+      setDone(appt)
+    } catch (err) {
+      setSubmitError(err)
+      if (err.code === 'slot_taken') {
+        setTime('')
+        setStep(2)
+        reloadSlots()
+      }
+    } finally {
+      setSending(false)
+    }
   }
+
+  const summary = <Summary {...{ clinic, branch, doctor, service, date, time, tr, price, longDate }} />
 
   if (done) {
     return (
@@ -76,10 +135,11 @@ export default function Booking() {
         <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-mint/40 text-4xl">✓</div>
         <h1 className="mt-6 text-2xl font-extrabold text-navy">{t('successTitle')}</h1>
         <p className="mt-2 text-slate-600">{t('successText')}</p>
-        <div className="card mt-8 p-5 text-left text-sm">
-          <Summary {...{ clinic, branch, doctor, service, date, time, tr, price, longDate }} />
+        <div className="card mt-8 p-5 text-left text-sm">{summary}</div>
+        <div className="mt-8 flex justify-center gap-3">
+          <Link to="/cabinet" className="btn-primary">{t('myAppointments')}</Link>
+          <Link to="/" className="btn-ghost">{t('toHome')}</Link>
         </div>
-        <Link to="/" className="btn-primary mt-8">{t('toHome')}</Link>
       </div>
     )
   }
@@ -89,7 +149,7 @@ export default function Booking() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 pt-8">
-      <Link to={`/clinics/${clinic.id}`} className="text-sm font-semibold text-brand">← {clinic.name}</Link>
+      <Link to={`/clinics/${clinic.slug}`} className="text-sm font-semibold text-brand">← {clinic.name}</Link>
       <h1 className="mt-2 text-2xl font-extrabold text-navy md:text-3xl">{t('bookingTitle')}</h1>
 
       <ol className="mt-6 grid grid-cols-4 gap-2">
@@ -107,6 +167,7 @@ export default function Booking() {
         <div className="card p-5 md:p-7">
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{t('step')} {step + 1} / 4</p>
           <h2 className="mt-1 text-xl font-bold text-navy">{t(steps[step])}</h2>
+          {submitError && <div className="mt-4"><ErrorBox error={submitError} /></div>}
 
           {step === 0 && (
             <div className="mt-5 space-y-6">
@@ -126,7 +187,7 @@ export default function Booking() {
                   {doctors.map((d) => (
                     <button key={d.id} onClick={() => pickDoctor(d.id)} className={option(d.id === doctorId)}>
                       <span className="block font-semibold text-navy">{d.name}</span>
-                      <span className="text-sm text-slate-500">{tr(getSpecialty(d.specialty).name)} · {d.experience} {t('experience')}</span>
+                      <span className="text-sm text-slate-500">{tr(specialties.find((s) => s.id === d.specialty).name)} · {d.experience} {t('experience')}</span>
                     </button>
                   ))}
                 </div>
@@ -138,12 +199,12 @@ export default function Booking() {
             <div className="mt-5 grid gap-3">
               <p className="text-sm font-semibold text-slate-600">{t('chooseService')}</p>
               {services.map((s) => (
-                <button key={s.id} onClick={() => setServiceId(s.id)} className={`${option(s.id === serviceId)} flex items-center justify-between gap-4`}>
+                <button key={s.id} onClick={() => { setServiceId(s.id); setTime('') }} className={`${option(s.id === serviceId)} flex items-center justify-between gap-4`}>
                   <span>
                     <span className="block font-semibold text-navy">{tr(s.name)}</span>
                     <span className="text-sm text-slate-500">{s.duration} {t('minutes')}</span>
                   </span>
-                  <span className="font-bold text-navy">{price(s.price)}</span>
+                  <span className="whitespace-nowrap font-bold text-navy">{price(s.price)}</span>
                 </button>
               ))}
             </div>
@@ -162,9 +223,7 @@ export default function Booking() {
                         onClick={() => { setDate(d); setTime('') }}
                         className={`flex w-16 shrink-0 flex-col items-center rounded-xl border py-3 transition ${active ? 'border-navy bg-navy text-white' : 'border-slate-200 bg-white hover:border-brand'}`}
                       >
-                        <span className={`text-xs ${active ? 'text-white/70' : 'text-slate-400'}`}>
-                          {weekday(d)}
-                        </span>
+                        <span className={`text-xs ${active ? 'text-white/70' : 'text-slate-400'}`}>{weekday(d)}</span>
                         <span className="text-lg font-bold">{d.getDate()}</span>
                       </button>
                     )
@@ -174,7 +233,9 @@ export default function Booking() {
               {date && (
                 <div>
                   <p className="mb-2 text-sm font-semibold text-slate-600">{t('chooseTime')}</p>
-                  {slots.length ? (
+                  {slotsLoading ? (
+                    <Loading />
+                  ) : slots?.length ? (
                     <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
                       {slots.map((s) => (
                         <button
@@ -199,7 +260,7 @@ export default function Booking() {
               <Field label={t('fullName')} error={t(errors.name)} className="sm:col-span-2">
                 <input className="field" value={form.name} onChange={(e) => setField('name', e.target.value)} autoComplete="name" />
               </Field>
-              <Field label={t('phone')} error={t(errors.phone)}>
+              <Field label={t('phone')} error={t(errors.phone)} className="sm:col-span-2">
                 <input
                   className="field"
                   value={form.phone}
@@ -208,12 +269,6 @@ export default function Booking() {
                   inputMode="tel"
                   autoComplete="tel"
                 />
-              </Field>
-              <Field label={t('email')} error={t(errors.email)}>
-                <input className="field" type="email" value={form.email} onChange={(e) => setField('email', e.target.value)} autoComplete="email" />
-              </Field>
-              <Field label={t('iin')} error={t(errors.iin)}>
-                <input className="field" value={form.iin} onChange={(e) => setField('iin', e.target.value.replace(/\D/g, '').slice(0, 12))} inputMode="numeric" />
               </Field>
               <Field label={`${t('comment')} (${form.comment.length}/300)`} error={t(errors.comment)} className="sm:col-span-2">
                 <textarea className="field min-h-24" value={form.comment} onChange={(e) => setField('comment', e.target.value)} />
@@ -237,7 +292,7 @@ export default function Booking() {
                 {t('next')} →
               </button>
             ) : (
-              <button type="submit" form="contact" className="btn-primary">{t('confirm')}</button>
+              <button type="submit" form="contact" disabled={sending} className="btn-primary">{t('confirm')}</button>
             )}
           </div>
         </div>
@@ -245,22 +300,11 @@ export default function Booking() {
         <aside className="space-y-4">
           <div className="card p-5 text-sm">
             <h3 className="mb-3 font-bold text-navy">{t('summary')}</h3>
-            <Summary {...{ clinic, branch, doctor, service, date, time, tr, price, longDate }} />
+            {summary}
           </div>
-          <DemoNotice />
         </aside>
       </div>
     </div>
-  )
-}
-
-function Field({ label, error, className = '', children }) {
-  return (
-    <label className={`block ${className}`}>
-      <span className="mb-1.5 block text-sm font-semibold text-slate-600">{label}</span>
-      {children}
-      {error && <span className="mt-1 block text-sm text-red-600">{error}</span>}
-    </label>
   )
 }
 

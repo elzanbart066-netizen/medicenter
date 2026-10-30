@@ -2,12 +2,15 @@ import { Link } from 'react-router-dom'
 import SearchBar from '../components/SearchBar.jsx'
 import ClinicCard from '../components/ClinicCard.jsx'
 import { useLang } from '../i18n.jsx'
-import { clinics, specialties } from '../data/clinics.js'
+import { useApi } from '../api.js'
+import { Loading } from '../components/ui.jsx'
+import { specialties } from '../../shared/constants.js'
 
 export default function Home() {
   const { t, tr } = useLang()
-  const featured = clinics.filter((c) => c.featured)
-  const doctorCount = clinics.reduce((n, c) => n + c.doctors.length, 0)
+  const { data: clinics } = useApi('/clinics')
+  const { data: stats } = useApi('/stats')
+  const featured = clinics?.filter((c) => c.featured).slice(0, 3)
 
   return (
     <>
@@ -24,8 +27,8 @@ export default function Home() {
             <SearchBar />
           </div>
           <div className="mt-8 flex gap-8 text-sm text-white/80">
-            <span><b className="block text-2xl text-white">{clinics.length}</b>{t('clinicsCount')}</span>
-            <span><b className="block text-2xl text-white">{doctorCount}</b>{t('doctorsCount')}</span>
+            <span><b className="block text-2xl text-white">{stats?.clinics ?? '—'}</b>{t('clinicsCount')}</span>
+            <span><b className="block text-2xl text-white">{stats?.doctors ?? '—'}</b>{t('doctorsCount')}</span>
           </div>
         </div>
       </section>
@@ -55,9 +58,13 @@ export default function Home() {
           </div>
           <Link to="/clinics" className="text-sm font-semibold text-brand hover:underline">{t('seeAll')} →</Link>
         </div>
-        <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {featured.map((c) => <ClinicCard key={c.id} clinic={c} />)}
-        </div>
+        {featured ? (
+          <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {featured.map((c) => <ClinicCard key={c.id} clinic={c} />)}
+          </div>
+        ) : (
+          <Loading />
+        )}
       </section>
 
       <section className="mx-auto max-w-6xl px-4 pt-14">

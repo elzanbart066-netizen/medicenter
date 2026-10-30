@@ -6,6 +6,10 @@ import Home from './pages/Home.jsx'
 import Catalog from './pages/Catalog.jsx'
 import Clinic from './pages/Clinic.jsx'
 import Booking from './pages/Booking.jsx'
+import Login from './pages/Login.jsx'
+import Register from './pages/Register.jsx'
+import ForClinics from './pages/ForClinics.jsx'
+import Cabinet from './pages/cabinet/index.jsx'
 import NotFound from './pages/NotFound.jsx'
 
 export default function App() {
@@ -17,8 +21,12 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/clinics" element={<Catalog />} />
-          <Route path="/clinics/:id" element={<Clinic />} />
-          <Route path="/booking/:clinicId" element={<Booking />} />
+          <Route path="/clinics/:slug" element={<Clinic />} />
+          <Route path="/booking/:slug" element={<Booking />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/for-clinics" element={<ForClinics />} />
+          <Route path="/cabinet" element={<Cabinet />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLang } from '../i18n.jsx'
-import { districts } from '../data/clinics.js'
+import { districts } from '../../shared/constants.js'
 
 export default function SearchBar({ initialQuery = '', initialDistrict = '' }) {
   const { t, tr } = useLang()
