@@ -8,6 +8,8 @@ export const config = {
     user: process.env.DB_USER || 'medicenter',
     password: process.env.DB_PASSWORD || 'Medicenter123!',
     database: process.env.DB_NAME || 'medicenter',
+    // Azure SQL requires encrypted connections
+    encrypt: process.env.DB_ENCRYPT === 'true' || /\.database\.windows\.net$/.test(process.env.DB_SERVER ?? ''),
   },
   jwtSecret: process.env.JWT_SECRET || 'dev-only-secret-change-me',
 }

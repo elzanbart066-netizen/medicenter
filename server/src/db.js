@@ -1,17 +1,19 @@
 import sql from 'mssql'
 import { config } from './config.js'
 
-const { instanceName, ...db } = config.db
+const { instanceName, encrypt, ...db } = config.db
 
 export const sqlConfig = (database = db.database) => ({
   ...db,
   ...(instanceName ? { port: undefined } : {}),
   database,
   pool: { max: 10 },
+  // A paused Azure SQL free-tier database can take up to a minute to wake up
+  connectionTimeout: 60000,
   options: {
     instanceName,
-    encrypt: false,
-    trustServerCertificate: true,
+    encrypt,
+    trustServerCertificate: !encrypt,
     // DATETIME2 values are Astana wall-clock time; read them back unchanged
     useUTC: true,
   },
@@ -20,7 +22,11 @@ export const sqlConfig = (database = db.database) => ({
 const pool = new sql.ConnectionPool(sqlConfig())
 let connecting = null
 // Connects on first use, so init-db can create the database before anything connects to it
-const connect = () => (connecting ??= pool.connect())
+const connect = () =>
+  (connecting ??= pool.connect().catch((err) => {
+    connecting = null // let the next request try again
+    throw err
+  }))
 
 // "2026-11-02 11:30:00" — the format the rest of the code compares and returns
 const pad = (n) => String(n).padStart(2, '0')

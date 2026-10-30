@@ -13,6 +13,9 @@ export const app = express()
 app.disable('x-powered-by')
 app.use(express.json({ limit: '100kb' }))
 
+// Health check for the hosting platform; does not touch the database so it never wakes it up
+app.get('/api/health', (_req, res) => res.json({ ok: true }))
+
 app.use('/api/auth', auth)
 app.use('/api/me', patient)
 app.use('/api/doctor', doctor)
