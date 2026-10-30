@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy: #0E3A6B;
+  --color-brand: #06B6D4;
+  --color-mint: #7EE7DB;
+  --color-surface: #F3F6FB;
+  --font-sans: "Montserrat", system-ui, sans-serif;
+}
+
+body {
+  @apply bg-surface text-slate-800 antialiased;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-navy px-5 py-3 font-semibold text-white transition hover:bg-brand disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-navy transition hover:border-brand hover:text-brand;
+}
+
+.card {
+  @apply rounded-2xl bg-white shadow-sm ring-1 ring-slate-100;
+}
+
+.field {
+  @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/15;
+}
+
+.chip {
+  @apply rounded-full border px-4 py-2 text-sm font-medium transition;
+}
