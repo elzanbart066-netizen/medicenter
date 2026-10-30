@@ -58,6 +58,8 @@ npm run dev       # Сайт: http://localhost:5173 (екінші термина
 - Build: `npm run setup && npm run build`
 - Start: `npm start`
 - Айнымалылар: `server/.env.example` қараңыз (`JWT_SECRET` міндетті).
-- SQL Server дерекқорын (мысалы, Azure SQL) бөлек ашып, бір рет `npm run db:init` орындау керек.
+- `DATABASE_URL` берілсе, сервер SQL Server орнына PostgreSQL-ді қолданады. Бос дерекқорда кестелер мен демо деректерді бірінші іске қосылғанда өзі құрады.
+
+Ең оңай жолы — Render Blueprint (`render.yaml`): сайт пен тегін PostgreSQL бір батырмамен ашылады. Қадамдары: [docs/deploy.md](docs/deploy.md).
 
 GitHub Pages тек статикалық сайтты көрсетеді, сондықтан backend-пен жұмыс істемейді.

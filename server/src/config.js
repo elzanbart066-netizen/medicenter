@@ -1,5 +1,7 @@
 export const config = {
   port: Number(process.env.PORT) || 3000,
+  // PostgreSQL connection string; when set it is used instead of SQL Server
+  databaseUrl: process.env.DATABASE_URL || undefined,
   db: {
     server: process.env.DB_SERVER || 'localhost',
     port: Number(process.env.DB_PORT) || 1433,

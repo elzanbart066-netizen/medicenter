@@ -1,9 +1,11 @@
-# Render blueprint: New → Blueprint → pick this repository
+# Render blueprint: New → Blueprint → pick this repository.
+# Creates the site and a free PostgreSQL database; the server fills the database on first start.
 services:
   - type: web
     name: medicenter
     runtime: node
     plan: free
+    region: frankfurt
     buildCommand: npm run setup && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
@@ -12,13 +14,14 @@ services:
         value: "22"
       - key: JWT_SECRET
         generateValue: true
-      - key: DB_SERVER
-        sync: false
-      - key: DB_USER
-        sync: false
-      - key: DB_PASSWORD
-        sync: false
-      - key: DB_NAME
-        value: medicenter
-      - key: DB_ENCRYPT
-        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: medicenter-db
+          property: connectionString
+
+databases:
+  - name: medicenter-db
+    plan: free
+    region: frankfurt
+    databaseName: medicenter
+    user: medicenter

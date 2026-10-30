@@ -2,12 +2,12 @@
 // and by the server on its first start against an empty database.
 import fs from 'node:fs/promises'
 import bcrypt from 'bcryptjs'
-import { insert, query } from './db.js'
+import { dialect, insert, query } from './db.js'
 import { specialties } from '../../shared/constants.js'
 import { clinics } from './scripts/seed-data.js'
 
 export async function seedDatabase() {
-  await query(await fs.readFile(new URL('../sql/schema.sql', import.meta.url), 'utf8'))
+  await query(await fs.readFile(new URL(dialect === 'postgres' ? '../sql/schema.postgres.sql' : '../sql/schema.sql', import.meta.url), 'utf8'))
 
   const hash = (pw) => bcrypt.hashSync(pw, 10)
   const addUser = (role, fullName, phone, email, password, organizationId = null) =>
@@ -101,6 +101,6 @@ export async function seedDatabase() {
 }
 
 export async function isEmpty() {
-  const row = await query("SELECT OBJECT_ID('organizations') AS id")
+  const row = await query(dialect === 'postgres' ? "SELECT to_regclass('organizations') AS id" : "SELECT OBJECT_ID('organizations') AS id")
   return row[0].id === null
 }
