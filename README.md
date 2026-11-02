@@ -17,15 +17,6 @@
 клиника әкімшісі тек өз ұйымының деректерін көреді (multi-tenant), пікірді тек аяқталған қабылдаудан кейін бір рет қалдыруға болады,
 өтінімі мақұлданбаған клиника каталогта көрінбейді.
 
-## MediCenter Desktop (тіркеу бөлімінің қосымшасы)
-
-`desktop/` қалтасында клиника тіркеушісіне арналған Python + PySide6 десктоп қосымшасы бар.
-Дизайны Figma-да жасалған, сайттың брендін қолданады. Толығырақ: [desktop/README.md](desktop/README.md).
-
-```bash
-cd desktop && pip install -r requirements.txt && python main.py
-```
-
 ## Технологиялар
 
 - **Frontend:** React 18, Vite, Tailwind CSS 4, React Router — `src/`

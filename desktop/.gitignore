@@ -1,6 +1,0 @@
-__pycache__/
-*.pyc
-medicenter.db
-build/
-dist/
-*.spec
